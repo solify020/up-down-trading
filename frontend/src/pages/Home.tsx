@@ -1,4 +1,4 @@
-import { DockIcon, History, LineChart, ShieldQuestionIcon, TimerReset } from "lucide-react"
+import { DockIcon, History, LineChart, ShieldQuestionIcon } from "lucide-react"
 import BTC from "../assets/icon/btc.png"
 import USDT from "../assets/icon/usdt.png"
 import { useEffect, useState } from "react";
@@ -10,7 +10,7 @@ import { toast } from "react-toastify";
 
 const Home = () => {
 
-    const [isBetted, setIsBetted] = useState(false);
+    // const [isBetted, setIsBetted] = useState(false);
     const [priceStamp, setPriceStamp] = useState(0);
     const [isShowBuyUp, setIsShowBuyUp] = useState<boolean>(false);
     const [isShowBuyDown, setIsShowBuyDown] = useState<boolean>(false);
@@ -22,11 +22,11 @@ const Home = () => {
 
     const [upBetAmount, setUpBetAmount] = useState(0);
     const [upPeriod, setUpPeriod] = useState(60);
-    const [upCurrency, setUpCurrency] = useState('BTC');
+    const [upCurrency] = useState('BTC');
 
     const [downBetAmount, setDownBetAmount] = useState(0);
     const [downPeriod, setDownPeriod] = useState(60);
-    const [downCurrency, setDownCurrency] = useState('BTC');
+    const [downCurrency] = useState('BTC');
 
     // useEffect(() => {
     //     const timedown = () => {
@@ -91,10 +91,10 @@ const Home = () => {
                     }
                 }).then((res) => {
                     if (res.data.msg == 'win bet') {
-                        setIsBetted(false);
+                        // setIsBetted(false);
                         return toast.success("You won the bet! You got x1.9");
                     } else {
-                        setIsBetted(false);
+                        // setIsBetted(false);
                         return toast.error("You lost the bet! Please place bet again.");
                     }
                 })
@@ -121,7 +121,6 @@ const Home = () => {
             setRemainingTime(res.data.bet.period);
             setPriceStamp(res.data.bet.pricestamp);
 
-            setIsBetted(true); // Similarly track active bet
             const countdown = setInterval(() => {
                 setRemainingTime(time => {
                     if (time <= 1) {
@@ -139,10 +138,10 @@ const Home = () => {
                     }
                 }).then((res) => {
                     if (res.data.msg == 'win bet') {
-                        setIsBetted(false);
+                        // setIsBetted(false);
                         return toast.success("You won the bet! You got x1.9");
                     } else {
-                        setIsBetted(false);
+                        // setIsBetted(false);
                         return toast.error("You lost the bet! Please place bet again.");
                     }
                 })
@@ -186,7 +185,7 @@ const Home = () => {
             else {
                 setPriceStamp(bet.bet.pricestamp);
                 setRemainingTime(Number((bet.bet.period - (Date.now() - bet.bet.timestamp) / 1000).toFixed(0)));
-                setIsBetted(true);
+                // setIsBetted(true);
 
                 const time = Date.now() - bet.bet.timestamp;
                 setTimeout(() => {
@@ -197,10 +196,10 @@ const Home = () => {
                             }
                         }).then((res) => {
                             if (res.data.msg == 'win bet') {
-                                setIsBetted(false);
+                                // setIsBetted(false);
                                 return toast.success("You won the bet! You got x1.9");
                             } else {
-                                setIsBetted(false);
+                                // setIsBetted(false);
                                 return toast.error("You lost the bet! Please place bet again.");
                             }
                         });
@@ -372,7 +371,7 @@ const Home = () => {
 
                     <div className="w-full flex flex-col justify-center items-start gap-1 mt-4">
                         <label htmlFor="Period" className="text-white text-xs">Period</label>
-                        <select name="" id="" className="w-full p-2 text-white bg-[#594872] rounded-full outline-none" onChange={(e) => { setDownPeriod(Number(e.target.value)) }} >
+                        <select name="" id="" className="w-full p-2 text-white bg-[#594872] rounded-full outline-none" onChange={(e) => { setUpPeriod(Number(e.target.value)) }} >
                             <option value="60">1m</option>
                             <option value="180">3m</option>
                             <option value="300">5m</option>

@@ -1,10 +1,8 @@
 import axios from "axios";
-import React, { useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 const Balance = () => {
-    const [depositAddress] = useState();
-    const [withdrawAddress, setWithdrawAddress] = useState("");
     const [amount, setAmount] = useState(0);
 
     const handleDeposit = () => {
