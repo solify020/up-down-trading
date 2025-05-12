@@ -7,20 +7,6 @@ import NoData from "../assets/icon/nodata.png"
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-### Problems in the Original
-- You had `setInterval(() => setRemainingTime(remainingTime - 1), 1000)` but this won't update as `remainingTime` is stale inside the closure.
-- You called setInterval/setTimeout inside effects or handlers, without clearing intervals, leading to memory leaks and broken timers.
-- The timer for "remainingTime" should be set up and cleaned up using `useEffect`, listening to changes in the period.
-
----
-
-Here's a **refactored** implementation that ensures reliable second countdown for the bet "period":
-
-```tsx
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { toast } from "react-toastify";
 
 const Home = () => {
 
@@ -53,6 +39,21 @@ const Home = () => {
     //     timedown();
     // }, [])
 
+    useEffect(() => {
+        if (remainingTime === 0) return;
+        const countdown = setInterval(() => {
+            setRemainingTime(time => {
+                if (time <= 1) {
+                    clearInterval(countdown);
+                    return 0;
+                }
+                return time - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(countdown);
+    }, [remainingTime]);
+
     const handleBuyUp = async () => {
         axios.post('/api/bet', {
             betType,
@@ -72,10 +73,15 @@ const Home = () => {
             setRemainingTime(res.data.bet.period);
             setPriceStamp(res.data.bet.pricestamp);
             console.log(res.data.bet.period);
-            
-            const timedown = setInterval(() => {
-                setRemainingTime(remainingTime - 1);
-                if(remainingTime == 0) clearInterval(timedown)
+
+            const countdown = setInterval(() => {
+                setRemainingTime(time => {
+                    if (time <= 1) {
+                        clearInterval(countdown);
+                        return 0;
+                    }
+                    return time - 1;
+                });
             }, 1000);
             setTimeout(() => {
                 axios.post('/api/check_bet', {}, {
@@ -112,11 +118,18 @@ const Home = () => {
             if (res.data.error == 'Invalid or expired token') return navigate('/');
             setIsShowBuyDown(false);
             setIsShowBuyUp(false);
-            setRemainingTime(downPeriod);
+            setRemainingTime(res.data.bet.period);
             setPriceStamp(res.data.bet.pricestamp);
-            const timedown = setInterval(() => {
-                setRemainingTime(remainingTime - 1);
-                if(remainingTime == 0) clearInterval(timedown)
+
+            setIsBetted(true); // Similarly track active bet
+            const countdown = setInterval(() => {
+                setRemainingTime(time => {
+                    if (time <= 1) {
+                        clearInterval(countdown);
+                        return 0;
+                    }
+                    return time - 1;
+                });
             }, 1000);
             setTimeout(() => {
                 axios.post('/api/check_bet', {}, {
@@ -133,22 +146,11 @@ const Home = () => {
                         return toast.error("You lost the bet! Please place bet again.");
                     }
                 })
-            }, downPeriod * 1000)
+            }, res.data.bet.period * 1000)
         });
     }
 
     const navigate = useNavigate();
-// ... your imports for UI/BTC/USDT remain unchanged
-const Home = () => {
-  // ...other states
-  const [remainingTime, setRemainingTime] = useState(0);
-  const [priceStamp, setPriceStamp] = useState(0);
-  const [isShowBuyUp, setIsShowBuyUp] = useState(false);
-  const [isShowBuyDown, setIsShowBuyDown] = useState(false);
-  // ...all your other states as before
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const navigate = useNavigate();
 
     useEffect(() => {
         setUpWinPrize(upBetAmount * 1.9)
@@ -183,22 +185,25 @@ const Home = () => {
             if (bet.msg !== 'waiting') toast.error("Please place Bet!");
             else {
                 setPriceStamp(bet.bet.pricestamp);
-                setRemainingTime(Number((bet.bet.period - (Date.now() - bet.bet.timestamp) / 1000).toFixed(0)))
-                    const countdown = setInterval(() => {
-                        setRemainingTime(remainingTime - 1);
-                        if (remainingTime == 0) clearInterval(countdown)
-                    }, 1000);
-                const time = Date.now() - bet.timestamp;
+                setRemainingTime(Number((bet.bet.period - (Date.now() - bet.bet.timestamp) / 1000).toFixed(0)));
+                setIsBetted(true);
+
+                const time = Date.now() - bet.bet.timestamp;
                 setTimeout(() => {
-                    const checkBet = async () => {
-                        await axios.post('/api/check_bet', undefined, {
+                        axios.post('/api/check_bet', undefined, {
                             headers: {
                                 'Authorization': `Bearer ${localStorage.getItem('token')}`,
                                 'Content-Type': 'application/json'
                             }
-                        })
-                    }
-                    checkBet();
+                        }).then((res) => {
+                            if (res.data.msg == 'win bet') {
+                                setIsBetted(false);
+                                return toast.success("You won the bet! You got x1.9");
+                            } else {
+                                setIsBetted(false);
+                                return toast.error("You lost the bet! Please place bet again.");
+                            }
+                        });
                 }, time)
             }
         }
@@ -236,133 +241,6 @@ const Home = () => {
                 <div className="w-full flex mt-4 gap-4 items-end text-white">
                     <span>You betted at: ${priceStamp}</span>
                 </div>
-  // Decrement countdown logic
-  useEffect(() => {
-    if (remainingTime <= 0) {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      return;
-    }
-    if (timerRef.current) return; // Prevent multiple intervals
-
-    timerRef.current = setInterval(() => {
-      setRemainingTime((prev) => {
-        if (prev <= 1 && timerRef.current) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-        }
-        return Math.max(prev - 1, 0);
-      });
-    }, 1000);
-
-    // Cleanup on unmount or when remainingTime reaches zero
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [remainingTime]);
-
-  // Helper to start the countdown
-  const startCountdown = useCallback((seconds: number) => {
-    setRemainingTime(seconds);
-  }, []);
-
-  const handleBuyUp = async () => {
-    try {
-      const res = await axios.post('/api/bet', {
-        betType: "up",
-        betAmount: upBetAmount,
-        period: upPeriod,
-        currency: upCurrency
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (res.data.msg === "already betted") return toast.error("Already Betted. Please wait.");
-      if (res.data.error === "Invalid or expired token") return navigate("/");
-      setIsShowBuyUp(false);
-      setIsShowBuyDown(false);
-
-      setPriceStamp(res.data.bet.pricestamp);
-      startCountdown(res.data.bet.period);
-
-      setTimeout(async () => {
-        const check = await axios.post('/api/check_bet', {}, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        setIsBetted(false);
-        if (check.data.msg === 'win bet') toast.success("You won the bet! You got x1.9");
-        else toast.error("You lost the bet! Please place bet again.");
-      }, res.data.bet.period * 1000);
-
-    } catch (err) {
-      toast.error("Error placing bet");
-    }
-  };
-
-  const handleBuyDown = async () => {
-    try {
-      const res = await axios.post('/api/bet', {
-        betType: "down",
-        betAmount: downBetAmount,
-        period: downPeriod,
-        currency: downCurrency
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (res.data.msg === "already betted") return toast.error("Already Betted. Please wait.");
-      if (res.data.error === "Invalid or expired token") return navigate("/");
-      setIsShowBuyUp(false);
-      setIsShowBuyDown(false);
-
-      setPriceStamp(res.data.bet.pricestamp);
-      startCountdown(res.data.bet.period);
-
-      setTimeout(async () => {
-        const check = await axios.post('/api/check_bet', {}, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        setIsBetted(false);
-        if (check.data.msg === 'win bet') toast.success("You won the bet! You got x1.9");
-        else toast.error("You lost the bet! Please place bet again.");
-      }, res.data.bet.period * 1000);
-
-    } catch (err) {
-      toast.error("Error placing bet");
-    }
-  };
-
-  // ...the rest of your component stays as before, you may want to set remainingTime in getBet too
-
-  // Your JSX
-  return (
-    // ...THE REST OF YOUR JSX
-    <div>
-      {/* ... */}
-      <div className="w-full flex mt-4 gap-4 items-end text-white">
-        <span>Remaining Time: {remainingTime}s</span>
-      </div>
-      {/* ... */}
-    </div>
-  );
-};
 
                 <div className="mt-4">
                     <TradingViewWidget />
@@ -426,7 +304,10 @@ const Home = () => {
 
                     <div className="w-full flex flex-col justify-center items-start gap-1 mt-4">
                         <label htmlFor="Period" className="text-white text-xs">Period</label>
-                        <select name="" id="" className="w-full p-2 text-white bg-[#594872] rounded-full outline-none">
+                        <select
+                            className="w-full p-2 text-white bg-[#594872] rounded-full outline-none"
+                            onChange={(e) => { setDownPeriod(Number(e.target.value)) }}
+                        >
                             <option value="60">1m</option>
                             <option value="120">2m</option>
                             <option value="300">5m</option>
@@ -491,7 +372,7 @@ const Home = () => {
 
                     <div className="w-full flex flex-col justify-center items-start gap-1 mt-4">
                         <label htmlFor="Period" className="text-white text-xs">Period</label>
-                        <select name="" id="" className="w-full p-2 text-white bg-[#594872] rounded-full outline-none">
+                        <select name="" id="" className="w-full p-2 text-white bg-[#594872] rounded-full outline-none" onChange={(e) => { setDownPeriod(Number(e.target.value)) }} >
                             <option value="60">1m</option>
                             <option value="180">3m</option>
                             <option value="300">5m</option>
