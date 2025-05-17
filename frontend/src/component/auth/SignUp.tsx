@@ -3,24 +3,37 @@ import Logo from "../../assets/logo.png"
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
+import ReCAPTCHA from 'react-google-recaptcha';
+
+
+const RECAPTCHA_SITE_KEY = '6LdN8DwrAAAAAIMnpR-t8E-tHBxXY6AlbDPI6vCl';
+
 
 const SignUp = () => {
 
     const navigate = useNavigate();
 
+    const [username, setUsername] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [password, setPassword] = useState('');
     const [rePassword, setRePassword] = useState('');
+    const [referralCode, setReferralCode] = useState('');
+    const [captchaToken, setCaptchaToken] = useState('');
+    const [isAgree, setIsAgree] = useState(false);
+
 
     const handleSignUp = async () => {
-        if(password != rePassword) return toast.error('Confirm Password Failed!');
-        axios.post('/api/signup', {username: phoneNumber, password: password}).then((res) => {
-            if(res.data.message == 'User created') {
+        if (password != rePassword) return toast.error('Confirm Password Failed!');
+        if (!isAgree) return toast.error('Please agree our privacy policy and term of service');
+        axios.post('/api/signup', { phoneNumber, password, username, captchaToken }).then((res) => {
+            if (res.data.message == 'User created') {
                 toast.success('SignUp success!');
                 return setTimeout(() => {
                     navigate('/');
                 }, 1000)
             }
+        }).catch((err) => {
+            if (err.response.data.error == 'captcha_error') return toast.error('reCAPTCHA Error!')
         })
     }
     return (
@@ -40,8 +53,21 @@ const SignUp = () => {
                                 <input
                                     type="text"
                                     placeholder="User Name"
+                                    value={username}
+                                    onChange={(e) => { setUsername(e.target.value) }}
+                                    className="flex-1 bg-transparent py-1 text-white placeholder-gray-400 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="w-full group">
+                            <label className="text-sm font-medium text-white mb-1 block">Phone Number</label>
+                            <div className="flex items-center gap-2 bg-[#3e2d54] px-3 py-2 rounded-full group-focus-within:ring-1 group-focus-within:ring-purple-500 transition">
+                                <input
+                                    type="text"
+                                    placeholder="Phone Number"
                                     value={phoneNumber}
-                                    onChange={(e) => {setPhoneNumber(e.target.value)}}
+                                    onChange={(e) => { setPhoneNumber(e.target.value) }}
                                     className="flex-1 bg-transparent py-1 text-white placeholder-gray-400 focus:outline-none"
                                 />
                             </div>
@@ -54,7 +80,7 @@ const SignUp = () => {
                                     type="password"
                                     placeholder="Password"
                                     value={password}
-                                    onChange={(e) => {setPassword(e.target.value)}}
+                                    onChange={(e) => { setPassword(e.target.value) }}
                                     className="flex-1 bg-transparent py-1 text-white placeholder-gray-400 focus:outline-none"
                                 />
                             </div>
@@ -66,7 +92,19 @@ const SignUp = () => {
                                     type="password"
                                     placeholder="Confirm Password"
                                     value={rePassword}
-                                    onChange={(e) => {setRePassword(e.target.value)}}
+                                    onChange={(e) => { setRePassword(e.target.value) }}
+                                    className="flex-1 bg-transparent py-1 text-white placeholder-gray-400 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="w-full group">
+                            <label className="text-sm font-medium text-white mb-1 block">Referral Code (Optional)</label>
+                            <div className="flex items-center gap-2 bg-[#3e2d54] px-3 py-2 rounded-full group-focus-within:ring-1 group-focus-within:ring-purple-500 transition">
+                                <input
+                                    type="text"
+                                    placeholder="Referal Code"
+                                    value={referralCode}
+                                    onChange={(e) => { setReferralCode(e.target.value) }}
                                     className="flex-1 bg-transparent py-1 text-white placeholder-gray-400 focus:outline-none"
                                 />
                             </div>
@@ -89,18 +127,26 @@ const SignUp = () => {
                             </div>
                         </div> */}
 
-                        {/* <div className="flex flex-col justify-center items-start text-sm text-gray-300 gap-2">
+                        <div className="flex flex-col justify-center items-start text-sm text-gray-300 gap-2">
                             <div className="flex items-center mb-2">
-                                <input id="default-checkbox" type="checkbox" value="" className="w-4 h-4 text-purple-500 bg-gray-100 border-gray-300 rounded-sm" />
-                                <label htmlFor="default-checkbox" className="ms-2 text-base text-gray-300 cursor-pointer">Buy checking this box you agree</label>
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 text-purple-500 bg-gray-100 border-gray-300 rounded-sm"
+                                    checked={isAgree}
+                                    onChange={(e => {setIsAgree(e.target.checked)})}
+                                />
+                                <label htmlFor="default-checkbox" className="ms-2 text-base text-gray-300 cursor-pointer">I agree with Privacy Policy and Service Terms</label>
                             </div>
-                            <div className="flex">
+                            {/* <div className="flex">
                                 <a href="#" className="underline">User Agreement</a>
                                 <p>&nbsp;&&nbsp;</p>
                                 <a href="#" className="underline">Privacy clause</a>
-                            </div>
-                        </div> */}
-
+                            </div> */}
+                        </div>
+                        <ReCAPTCHA
+                            sitekey={RECAPTCHA_SITE_KEY}
+                            onChange={(token: any) => setCaptchaToken(token)}
+                        />
                         <button className="w-full bg-[#e478ff] text-white font-semibold py-3 rounded-full hover:bg-[#d55ee9] transition" onClick={handleSignUp}>
                             Sign Up
                         </button>

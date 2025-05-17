@@ -6,18 +6,61 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import axios from 'axios';
 import config from './config';
 import {WebSocket} from 'ws';
+import verifyCaptcha, { checkVerificationCode, sendVerificationCode } from './util';
 
-const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+const btc = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+const eth = new WebSocket('wss://stream.binance.com:9443/ws/ethusdt@trade');
+const sol = new WebSocket('wss://stream.binance.com:9443/ws/solusdt@trade');
+const xrp = new WebSocket('wss://stream.binance.com:9443/ws/xrpusdt@trade');
+const ltc = new WebSocket('wss://stream.binance.com:9443/ws/ltcusdt@trade');
 
-var btcPrice = 0;
+var cryptoPrice = {
+  btc: 0,
+  eth: 0,
+  sol: 0,
+  xrp: 0,
+  ltc: 0
+}
 
-ws.on('open', () => {
+btc.on('open', () => {
   console.log('Websocket connected!');
 });
 
-ws.on('message', (data: any) => {
+btc.on('message', (data: any) => {
   const trade = JSON.parse(data);
-  btcPrice = parseFloat(trade.p);
+  cryptoPrice.btc = parseFloat(trade.p);
+});
+eth.on('open', () => {
+  console.log('Websocket connected!');
+});
+
+eth.on('message', (data: any) => {
+  const trade = JSON.parse(data);
+  cryptoPrice.eth = parseFloat(trade.p);
+});
+sol.on('open', () => {
+  console.log('Websocket connected!');
+});
+
+sol.on('message', (data: any) => {
+  const trade = JSON.parse(data);
+  cryptoPrice.sol = parseFloat(trade.p);
+});
+xrp.on('open', () => {
+  console.log('Websocket connected!');
+});
+
+xrp.on('message', (data: any) => {
+  const trade = JSON.parse(data);
+  cryptoPrice.xrp = parseFloat(trade.p);
+});
+ltc.on('open', () => {
+  console.log('Websocket connected!');
+});
+
+ltc.on('message', (data: any) => {
+  const trade = JSON.parse(data);
+  cryptoPrice.ltc = parseFloat(trade.p);
 });
 
 const app = express();
@@ -29,7 +72,9 @@ app.use(morgan('dev'))
 
 interface IUser extends Document {
   username: string;
+  phoneNumber: string;
   passwordHash: string;
+  isVerified: boolean;
   score: number;
 }
 
@@ -47,7 +92,8 @@ interface IBet extends Document {
 const userSchema: Schema<IUser> = new Schema({
   username: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
-
+  phoneNumber: {type: String, required: true},
+  isVerified: {type: Boolean, required: true},
   score: { type: Number }
 });
 
@@ -76,11 +122,13 @@ const JWT_SECRET = 'Nicesky254*'; // Store this securely in env variables
 
 // Signup route
 app.post('/signup', async (req: Request, res: Response) => {
-  const { username, password } = req.body;
-  console.log(req);
+  const { phoneNumber, username, password, captchaToken } = req.body;
   
-  console.log(username, password)
-  if (!username || !password) {
+  if (captchaToken == '') return res.status(400).json({error: 'captcha_error'});
+
+  if (await verifyCaptcha(captchaToken) == false) return res.status(400).json({error: 'captcha_error'});
+
+  if (!phoneNumber || !username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
@@ -90,8 +138,13 @@ app.post('/signup', async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'User already exists' });
     }
 
+    const existingPhone = await User.findOne({ phoneNumber });
+    if (existingPhone) {
+      return res.status(409).json({ error: 'Phone already exists' });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = new User({ username, passwordHash, score: 0 });
+    const user = new User({ username, phoneNumber, passwordHash, isVerified: false, score: 0 });
     await user.save();
     return res.status(201).json({ message: 'User created' });
   } catch (err) {
@@ -101,20 +154,46 @@ app.post('/signup', async (req: Request, res: Response) => {
 
 // Signin route
 app.post('/signin', async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+  const { phoneNumber, password, captchaToken } = req.body;
   try {
-    const user = await User.findOne({ username });
+    if (captchaToken == '') return res.status(400).json({error: 'captcha_error'});
+    if (await verifyCaptcha(captchaToken) == false) return res.status(400).json({error: 'captcha_error'});
+
+    const user = await User.findOne({ phoneNumber });
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+    if (!user.isVerified) return res.status(200).json({msg: 'not_verified'});
+    
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ phoneNumber }, JWT_SECRET, { expiresIn: '1h' });
     return res.json({ token });
   } catch (err) {
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/send_verify', async (req: Request, res: Response) => {
+  try {
+    await sendVerificationCode(req.body.phoneNumber);
+    return res.status(200).json({msg: 'sent_verify'});
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({error: 'unknown_error'});
+  }
+});
+
+app.post('/check_verify', async (req: Request, res: Response) => {
+  try {
+    await checkVerificationCode(req.body.phoneNumber, req.body.code);
+    await User.updateOne({phoneNumber: req.body.phoneNumber}, {isVerified: true}, {new: true});
+    return res.status(200).json({msg: 'verify_success'});
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({error: 'unknown_error'});
   }
 });
 
@@ -129,9 +208,9 @@ app.post('/bet', async (req: Request, res: Response) => {
 
   try {
     // Verify JWT and get username
-    const payload = jwt.verify(token, JWT_SECRET) as { username: string };
-    const username = payload.username;
-    const user = await User.findOne({username: username});
+    const payload = jwt.verify(token, JWT_SECRET) as {phoneNumber: string};
+    const phoneNumber = payload.phoneNumber;
+    const user = await User.findOne({phoneNumber: phoneNumber});
     if(user == null) return res.status(401).json({msg: 'Please signup!'})
     if(user.score < betAmount) return res.status(400).json({msg: 'Insufficient funds.'})
     // Validate bet fields
@@ -140,20 +219,20 @@ app.post('/bet', async (req: Request, res: Response) => {
     }
 
     const betItem = await Bet.findOne({
-      username: username,
+      phoneNumber: phoneNumber,
       status: 'waiting'
     });
     console.log(betItem);
     
     if (betItem) return res.status(400).json({msg: 'already betted'});
     // Assume currency is always 'usd' for now, and get current price/timestamp (stubbed)
-    const pricestamp = btcPrice; // In a real app, fetch the current price
+    const pricestamp = cryptoPrice.btc; // In a real app, fetch the current price
     const timestamp = Date.now();
 
     const bet = new Bet({
-      username,
+      phoneNumber,
       timestamp,
-      pricestamp: btcPrice,
+      pricestamp: cryptoPrice.btc,
       currency,
       status: 'waiting',
       betType,
@@ -163,7 +242,7 @@ app.post('/bet', async (req: Request, res: Response) => {
     await bet.save();
 
     User.findOneAndUpdate(
-      {username: username},
+      {phoneNumber: phoneNumber},
       {$inc: {score: -betAmount}},
       {new: true}
     )
@@ -183,11 +262,11 @@ app.get('/get_bet', async (req: Request, res: Response) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as {username: string};
-    const username = payload.username;
+    const payload = jwt.verify(token, JWT_SECRET) as {phoneNumber: string};
+    const phoneNumber = payload.phoneNumber;
 
     Bet.findOne({
-      username: username,
+      phoneNumber: phoneNumber,
       status: 'waiting'
     }).then(item => {
       const bet = {
@@ -215,17 +294,17 @@ app.post('/check_bet', async (req: Request, res: Response) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as {username: string};
-    const username = payload.username;
+    const payload = jwt.verify(token, JWT_SECRET) as {phoneNumber: string};
+    const phoneNumber = payload.phoneNumber;
 
     const bet = await Bet.findOne({
       status: 'waiting',
-      username: username
+      phoneNumber: phoneNumber
     });
     if(bet?.status !== 'waiting') return res.status(200).json({msg: "Please place bet.", code: "no_bet"});
     const now = Date.now();
     if(now - bet.timestamp >= bet.period * 1000) { // Finished
-      const price = btcPrice;
+      const price = cryptoPrice.btc;
       if(price > bet.pricestamp && bet.betType === 'up' || price < bet.pricestamp && bet.betType === 'down') { // Win the Bet
         bet.status = 'win';
         User.findOneAndUpdate(
@@ -255,8 +334,8 @@ app.post('/confirm_deposit', async (req: Request, res: Response) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { username: string };
-    const username = payload.username;
+    const payload = jwt.verify(token, JWT_SECRET) as {phoneNumber: string};
+    const phoneNumber = payload.phoneNumber;
 
     // Validate amount
     if (!amount || typeof amount !== 'number' || amount <= 0) {
@@ -264,18 +343,57 @@ app.post('/confirm_deposit', async (req: Request, res: Response) => {
     }
 
     // TODO: In a real app, here you’d record the deposit in the DB, update user balance, etc.
-    await User.updateOne({username: username}, {
+    await User.updateOne({phoneNumber: phoneNumber}, {
       $inc: {score: amount},
     }, {new: true});
     // For now, just acknowledge the deposit
-    return res.status(200).json({ message: 'Deposit confirmed', username, amount });
+    return res.status(200).json({ message: 'Deposit confirmed', amount });
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 });
 
+app.get('/get_history', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as {phoneNumber: string};
+    const phoneNumber = payload.phoneNumber;
+
+    const history = await Bet.find({phoneNumber: phoneNumber, status: {$in: ['win', 'lose']}});
+    res.status(200).json({history})
+  } catch (err) {
+    console.log(err);
+  }
+})
+
+app.get('/get_balance', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as {phoneNumber: string};
+    const phoneNumber = payload.phoneNumber;
+    const user = await User.findOne({phoneNumber: phoneNumber});
+    const score = user?.score;
+    res.json({score});
+  } catch (err) {
+    console.log(err);
+  }
+})
+
+app.get('/all_price', (req: Request, res: Response) => {
+  res.json({cryptoPrice});
+})
+
 app.get('/btc_price', (req: Request, res: Response) => {
-  res.json({btc: btcPrice});
+  res.json({btc: cryptoPrice.btc});
 })
 
 app.post('/withdraw', async (req: Request, res: Response) => {
