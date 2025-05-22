@@ -33,7 +33,7 @@ export const sendVerificationCode = async (phoneNumber: string) => {
     "MessagingServiceSid": '',
     "Body": `Your verification code is ${code}`
   });
-  return await axios.post('https://api.twilio.com/2010-04-01/Accounts/AC556ae44a8910b175168b1f308391f669/Messages.json', data, {
+  return await axios.post('https://api.twilio.com/2010-04-01/Accounts//Messages.json', data, {
     auth: {
       username: '',
       password: ''
