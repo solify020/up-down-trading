@@ -79,7 +79,7 @@ interface IUser extends Document {
 }
 
 interface IBet extends Document {
-  username: string;
+  phoneNumber: string;
   timestamp: number;
   pricestamp: number;
   currency: string;
@@ -98,7 +98,7 @@ const userSchema: Schema<IUser> = new Schema({
 });
 
 const betSchema: Schema<IBet> = new Schema({
-  username: { type: String, required: true },
+  phoneNumber: { type: String, required: true },
   timestamp: { type: Number, required: true },
   pricestamp: { type: Number, required: true },
   currency: { type: String, required: true },
@@ -188,7 +188,8 @@ app.post('/send_verify', async (req: Request, res: Response) => {
 
 app.post('/check_verify', async (req: Request, res: Response) => {
   try {
-    await checkVerificationCode(req.body.phoneNumber, req.body.code);
+    const isVerified = await checkVerificationCode(req.body.phoneNumber, req.body.code);
+    if(!isVerified) return res.status(400).json({msg: 'Invalid verification code.'});
     await User.updateOne({phoneNumber: req.body.phoneNumber}, {isVerified: true}, {new: true});
     return res.status(200).json({msg: 'verify_success'});
   } catch (err) {
@@ -226,7 +227,6 @@ app.post('/bet', async (req: Request, res: Response) => {
     
     if (betItem) return res.status(400).json({msg: 'already betted'});
     // Assume currency is always 'usd' for now, and get current price/timestamp (stubbed)
-    const pricestamp = cryptoPrice.btc; // In a real app, fetch the current price
     const timestamp = Date.now();
 
     const bet = new Bet({
@@ -249,6 +249,8 @@ app.post('/bet', async (req: Request, res: Response) => {
 
     return res.status(201).json({ message: 'Bet placed', bet });
   } catch (err) {
+    console.log(err);
+    
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
@@ -308,7 +310,7 @@ app.post('/check_bet', async (req: Request, res: Response) => {
       if(price > bet.pricestamp && bet.betType === 'up' || price < bet.pricestamp && bet.betType === 'down') { // Win the Bet
         bet.status = 'win';
         User.findOneAndUpdate(
-          {username: bet.username},
+          {phoneNumber: bet.phoneNumber},
           {$inc: {score: bet.pricestamp * Number(config.WIN_BUDGET_RATE)}},
           {new: true}
         );
